@@ -1,0 +1,10 @@
+const express=require("express");
+const router=express.Router();
+const authMiddleware=require("../middleware/authMiddleware");
+const linkController=require("../controllers/linkController");
+router.post("/",authMiddleware,linkController.createLink);
+router.get("/",authMiddleware,linkController.getAllLinks);
+router.get("/:id",authMiddleware,linkController.getLink);
+router.put("/:id",authMiddleware,linkController.updateLink);
+router.delete("/:id",authMiddleware,linkController.deleteLink);
+module.exports=router;

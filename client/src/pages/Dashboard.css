@@ -1,0 +1,143 @@
+
+.navbar{
+    height:70px;
+    padding:0 50px;
+
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+
+    background:linear-gradient(
+        135deg,
+        #2563eb,
+        #3b82f6
+    );
+
+    color:white;
+
+    box-shadow:0 4px 15px rgba(0,0,0,.15);
+}
+
+.nav-logo{
+    font-size:28px;
+    font-weight:700;
+    letter-spacing:.5px;
+}
+
+.nav-right{
+    display:flex;
+    align-items:center;
+    gap:20px;
+}
+
+.welcome-user{
+    font-size:16px;
+    font-weight:500;
+}
+
+.logout-btn{
+
+    background:white;
+    color:#2563eb;
+
+    padding:10px 18px;
+
+    border:none;
+    border-radius:8px;
+
+    font-weight:600;
+
+    cursor:pointer;
+
+    transition:.3s;
+}
+
+.logout-btn:hover{
+
+    background:#e5e7eb;
+
+}
+.dashboard-container {
+    max-width: 900px;
+    margin: 40px auto;
+    padding: 20px;
+}
+
+.dashboard-title {
+    font-size: 36px;
+    color: #2563eb;
+    margin-bottom: 8px;
+}
+
+.dashboard-subtitle {
+    color: #666;
+    margin-bottom: 30px;
+}
+
+.create-form {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 35px;
+}
+
+.create-form input {
+    flex: 1;
+    padding: 14px;
+    border: 1px solid #ddd;
+    border-radius: 10px;
+    font-size: 16px;
+}
+
+.create-form button {
+    padding: 14px 22px;
+    background: #2563eb;
+    color: white;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+}
+
+.links-title {
+    margin-bottom: 20px;
+}
+
+.link-card {
+    background: white;
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 18px;
+    box-shadow: 0 4px 12px rgba(0,0,0,.08);
+}
+
+.link-card p {
+    margin-bottom: 10px;
+}
+
+.delete-btn {
+    background: #ef4444;
+    color: white;
+    padding: 10px 16px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+}
+
+.delete-btn:hover {
+    background: #dc2626;
+}
+.card-actions{
+    display: flex;
+    gap: 10px;
+    margin-top: 12px;
+}
+.short-link{
+    color:#2563eb;
+    text-decoration:none;
+    font-weight:500;
+    transition:0.2s ease;
+}
+
+.short-link:hover{
+    text-decoration:underline;
+    color:#1d4ed8;
+}
