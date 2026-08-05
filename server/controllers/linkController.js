@@ -1,6 +1,8 @@
 
 const Link=require("../model/Link");
 const { generateShortCode } = require("../utils/generateShortCode");
+const { redisClient } = require("../config/redis");
+const analyticsQueue = require("../queues/analyticsQueue");
 exports.createLink=async(req,res)=>{
     // console.log(req.body);
     const originalUrl=req.body.originalUrl;
@@ -43,14 +45,24 @@ exports.getAllLinks=async(req,res)=>{
 exports.redirectLink=async(req,res)=>{
     const {shortCode}=req.params;
     try{
+        const cachedUrl = await redisClient.get(shortCode);
+        if(cachedUrl){
+            console.log("cache hit");
+            await analyticsQueue.add("click", {
+                shortCode,
+            });
+            return res.redirect(cachedUrl);
+        }
+        console.log("Cache Miss");
         const link=await Link.findOne({shortCode});
         if(!link){
             return res.status(404).send("ShortCode doesnt exist");
         }
-        await Link.findOneAndUpdate(
-    { shortCode },
-    { $inc: { clicks: 1 } }
-);
+        await redisClient.set(shortCode, link.originalUrl, {EX: 3600,});
+        console.log("Stored in Redis");
+        await analyticsQueue.add("click", {
+            shortCode,
+        });
         res.redirect(link.originalUrl);
     }
     catch(error){
@@ -92,6 +104,8 @@ exports.updateLink=async(req,res)=>{
     }
     link.originalUrl=originalUrl;
     await link.save();
+    await redisClient.del(link.shortCode);
+    console.log(`Cache Invalidated: ${link.shortCode}`);
     res.status(200).send(link);
     }
      catch(error){
@@ -110,6 +124,8 @@ exports.deleteLink=async(req,res)=>{
     if(!link){
         return res.status(404).send("Link not found");
     }
+    await redisClient.del(link.shortCode);
+    console.log(`🗑️ Cache Invalidated: ${link.shortCode}`);
     res.status(200).send("link deleted successfully");
     }
     catch(error){
