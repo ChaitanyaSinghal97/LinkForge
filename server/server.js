@@ -1,6 +1,6 @@
 require("dotenv").config();
 const app=require("./app.js");
-const connectDB=require("./config/db.js");
+const {connectDB}=require("./config/db.js");
 const { connectRedis } = require("./config/redis");
 require("./workers/analyticsWorker");
 const startServer=async()=>{

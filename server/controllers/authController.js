@@ -1,5 +1,6 @@
-const User=require("../model/User");
+
 const bcrypt=require("bcrypt");
+const {pool}=require("../config/db");
 const jwt = require("jsonwebtoken");
 exports.signup=async(req,res)=>{
     const {username,email,password}=req.body;
@@ -7,21 +8,19 @@ exports.signup=async(req,res)=>{
         return res.status(400).send("Username and email and password required");
     }
     try{
-    const existingUser= await User.findOne({email});
-    if(existingUser){
+    const existingUser= await pool.query("SELECT * FROM users WHERE email = $1",[email]);
+    if(existingUser.rows.length>0){
         return res.status(409).send("Email already exist");
     }
     const storedPassword= await bcrypt.hash(password,10);
-    const newUser=new User({
-        username,
-        email,
-        password:storedPassword
-    });
-    await newUser.save();
+    const result=await pool.query(`INSERT INTO users(username,email,password)
+        VALUES ($1,$2,$3)
+        RETURNING id,username,email`,[username,email,storedPassword]);
+    const newUser=result.rows[0];
     return res.status(201).send({
         message:"User created successfully",
         user:{
-            id:newUser._id,
+            id:newUser.id,
             username:newUser.username,
             email:newUser.email
         }
@@ -38,14 +37,15 @@ exports.login=async(req,res)=>{
         return res.status(400).send("email and password required");
     }
     try{
-        const existingUser= await User.findOne({email});
+        const result=await pool.query("SELECT * FROM users WHERE email = $1",[email]);
+        const existingUser=result.rows[0];
         if(!existingUser){
             return res.status(401).send("Invalid email or password");
         }
         const isMatch=await bcrypt.compare(password,existingUser.password);
         if(isMatch){
             const token = jwt.sign(
-        {id: existingUser._id},
+        {id: existingUser.id},
         process.env.JWT_SECRET,
         {expiresIn: "1d"}  
         );
@@ -53,7 +53,7 @@ exports.login=async(req,res)=>{
                 message:"Login successful",
                 token,
                 user: {
-                        id: existingUser._id,
+                        id: existingUser.id,
                         username: existingUser.username,
                         email: existingUser.email
                     }

@@ -1,47 +1,77 @@
 
-const Link=require("../model/Link");
 const { generateShortCode } = require("../utils/generateShortCode");
 const { redisClient } = require("../config/redis");
 const analyticsQueue = require("../queues/analyticsQueue");
-exports.createLink=async(req,res)=>{
-    // console.log(req.body);
-    const originalUrl=req.body.originalUrl;
-    if(!originalUrl){
+const { pool } = require("../config/db");
+exports.createLink = async (req, res) => {
+    const originalUrl = req.body.originalUrl;
+
+    if (!originalUrl) {
         return res.status(400).send("URL is required");
     }
-    try{
-    let shortCode;
-    let existing;
-    do{
-        shortCode= generateShortCode();
-        existing=await Link.findOne({shortCode});
-    }while(existing)
-    
-        const savedLink=await Link.create({
-        originalUrl,
-        shortCode,
-        user:req.user.id
-    });
-    res.status(201).send(savedLink);
+
+    try {
+        let shortCode;
+        let existing;
+
+        do {
+            shortCode = generateShortCode();
+
+            const result = await pool.query(
+                "SELECT id FROM links WHERE short_code = $1",
+                [shortCode]
+            );
+
+            existing = result.rows[0];
+
+        } while (existing);
+
+        const result = await pool.query(
+            `INSERT INTO links (original_url, short_code, user_id)
+             VALUES ($1, $2, $3)
+             RETURNING
+                id AS "_id",
+                original_url AS "originalUrl",
+                short_code AS "shortCode",
+                clicks,
+                user_id AS "user",
+                created_at AS "createdAt",
+                updated_at AS "updatedAt"`,
+            [originalUrl, shortCode, req.user.id]
+        );
+
+        const savedLink = result.rows[0];
+
+        res.status(201).send(savedLink);
     }
-    catch(error){
+    catch (error) {
         console.log(error);
         return res.status(500).send("Internal server error");
     }
 };
-exports.getAllLinks=async(req,res)=>{
-    try{
-        const links=await Link.find({
-            user:req.user.id
-        });
-        res.status(200).send(links);
+exports.getAllLinks = async (req, res) => {
+    try {
+        const result = await pool.query(
+            `SELECT
+                id AS "_id",
+                original_url AS "originalUrl",
+                short_code AS "shortCode",
+                clicks,
+                user_id AS "user",
+                created_at AS "createdAt",
+                updated_at AS "updatedAt"
+             FROM links
+             WHERE user_id = $1`,
+            [req.user.id]
+        );
+
+        res.status(200).send(result.rows);
     }
-    catch(error){
+    catch (error) {
         console.log(error);
         return res.status(500).send("Internal server error");
     }
-    
-}
+};
 exports.redirectLink=async(req,res)=>{
     const {shortCode}=req.params;
     try{
@@ -50,20 +80,34 @@ exports.redirectLink=async(req,res)=>{
             console.log("cache hit");
             await analyticsQueue.add("click", {
                 shortCode,
+                timestamp: new Date(),
+                ip: req.ip,
+                userAgent: req.get("user-agent"),
+                referrer: req.get("referer")
             });
             return res.redirect(cachedUrl);
         }
         console.log("Cache Miss");
-        const link=await Link.findOne({shortCode});
-        if(!link){
+        const result = await pool.query(
+            `SELECT original_url
+             FROM links
+             WHERE short_code = $1`,
+            [shortCode]
+        );
+        if (result.rows.length === 0) {
             return res.status(404).send("ShortCode doesnt exist");
         }
-        await redisClient.set(shortCode, link.originalUrl, {EX: 3600,});
+        const originalUrl = result.rows[0].original_url;
+        await redisClient.set(shortCode, originalUrl, {EX: 3600,});
         console.log("Stored in Redis");
         await analyticsQueue.add("click", {
             shortCode,
-        });
-        res.redirect(link.originalUrl);
+            timestamp: new Date(),
+            ip: req.ip,
+            userAgent: req.get("user-agent"),
+            referrer: req.get("referer")
+        }); 
+        res.redirect(originalUrl);
     }
     catch(error){
         console.log(error);
@@ -74,13 +118,24 @@ exports.redirectLink=async(req,res)=>{
 exports.getLink=async(req,res)=>{
     const id=req.params.id;
     try{
-        const link= await Link.findOne({
-            _id:id,
-            user:req.user.id
-        });
-        if(!link){
+        const result = await pool.query(
+            `SELECT
+                id AS "_id",
+                original_url AS "originalUrl",
+                short_code AS "shortCode",
+                clicks,
+                user_id AS "user",
+                created_at AS "createdAt",
+                updated_at AS "updatedAt"
+             FROM links
+             WHERE id = $1
+             AND user_id = $2`,
+            [id, req.user.id]
+        );
+        if (result.rows.length === 0) {
             return res.status(404).send("Link not found");
         }
+        const link=result.rows[0];
         res.status(200).send(link);
     }
     catch(error){
@@ -89,24 +144,44 @@ exports.getLink=async(req,res)=>{
     }
 }
 exports.updateLink=async(req,res)=>{
-    const id=req.params.id;
-    try{
-    const link= await Link.findOne({
-            _id:id,
-            user:req.user.id
-        });
-    if(!link){
-        return res.status(404).send("Link not found");
-    }
-    const {originalUrl}=req.body;
-    if(!originalUrl ){
-        return res.status(400).send("URL is required");
-    }
-    link.originalUrl=originalUrl;
-    await link.save();
-    await redisClient.del(link.shortCode);
-    console.log(`Cache Invalidated: ${link.shortCode}`);
-    res.status(200).send(link);
+    const id = req.params.id;
+
+    try {
+        const { originalUrl } = req.body;
+
+        if (!originalUrl) {
+            return res.status(400).send("URL is required");
+        }
+
+        const result = await pool.query(
+            `UPDATE links
+             SET original_url = $1,
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE id = $2
+             AND user_id = $3
+             RETURNING
+                id AS "_id",
+                original_url AS "originalUrl",
+                short_code AS "shortCode",
+                clicks,
+                user_id AS "user",
+                created_at AS "createdAt",
+                updated_at AS "updatedAt"`,
+            [originalUrl, id, req.user.id]
+        );
+
+        if (result.rows.length === 0) {
+            return res.status(404).send("Link not found");
+        }
+
+        const updatedLink = result.rows[0];
+
+        // Invalidate old cached URL
+        await redisClient.del(updatedLink.shortCode);
+
+        console.log(`Cache Invalidated: ${updatedLink.shortCode}`);
+
+        res.status(200).send(updatedLink);
     }
      catch(error){
         console.log(error);
@@ -116,17 +191,27 @@ exports.updateLink=async(req,res)=>{
 }
 exports.deleteLink=async(req,res)=>{
     const id=req.params.id;
-    try{
-    const link= await Link.findOneAndDelete({
-            _id:id,
-            user:req.user.id
-        });
-    if(!link){
-        return res.status(404).send("Link not found");
-    }
-    await redisClient.del(link.shortCode);
-    console.log(`🗑️ Cache Invalidated: ${link.shortCode}`);
-    res.status(200).send("link deleted successfully");
+    try {
+        const result = await pool.query(
+            `DELETE FROM links
+             WHERE id = $1
+             AND user_id = $2
+             RETURNING short_code`,
+            [id, req.user.id]
+        );
+
+        if (result.rows.length === 0) {
+            return res.status(404).send("Link not found");
+        }
+
+        const shortCode = result.rows[0].short_code;
+
+        // Remove from Redis
+        await redisClient.del(shortCode);
+
+        console.log(`Cache Invalidated: ${shortCode}`);
+
+        res.status(200).send("link deleted successfully");
     }
     catch(error){
         console.log(error);

@@ -1,6 +1,6 @@
 const {redisClient} = require("../config/redis");
 const rateLimiter = async (req, res, next) => {
-    const LIMIT=5;
+    const LIMIT=500;
     const WINDOW=60;
     const ip=req.ip;
     const key=`rate:${ip}`;
